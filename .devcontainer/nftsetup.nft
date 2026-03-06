@@ -1,0 +1,4 @@
+add table inet t
+add set inet t s4{type ipv4_addr; flags timeout,dynamic;}
+add set inet t s6{type ipv6_addr; flags timeout,dynamic;}
+add set inet t e{type ipv4_addr; flags timeout,dynamic;}

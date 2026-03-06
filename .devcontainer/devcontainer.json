@@ -1,0 +1,38 @@
+{
+  "name": "nftsync",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "root",
+  "securityOpt": [
+    "apparmor=unconfined"
+  ],
+  "capAdd": [
+    "NET_ADMIN",
+    "SYS_ADMIN",
+    "NET_RAW",
+    "DAC_READ_SEARCH"
+  ],
+  "runArgs": [
+    "--privileged",
+    "--systemd=always"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.Go"
+      ],
+      "settings": {
+        "go.lintOnSave": "package",
+        "go.useLanguageServer": true,
+        "[go]": {
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "always"
+          }
+        }
+      }
+    }
+  },
+  "postStartCommand": "/usr/sbin/nft -f .devcontainer/nftsetup.nft"
+}

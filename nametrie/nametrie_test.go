@@ -1,0 +1,87 @@
+package nametrie
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+)
+
+func (n *node[T]) visualize(label string, depth int) {
+	indent := strings.Repeat("  ", depth)
+	info := ""
+	if n.wildcardValue != nil {
+		info += " [*.value: " + fmt.Sprintf("%v", *n.wildcardValue) + "]"
+	}
+	if n.value != nil {
+		info += fmt.Sprintf(" [value:%v]", *n.value)
+	}
+	fmt.Printf("%s|-%s%s\n", indent, label, info)
+	for childLabel, childNode := range n.children {
+		childNode.visualize(childLabel, depth+1)
+	}
+}
+
+// Visualize prints the structure of the TrieTree
+func (t *TrieTree[T]) Visualize(label string, depth int) {
+	root := t.current.Load()
+	if root != nil {
+		root.visualize(label, depth)
+	}
+}
+
+func TestNodeInsert(t *testing.T) {
+	root := newNode[string]()
+	root.insert("example.com", "val")
+
+	if _, ok := root.children["com"]; !ok {
+		t.Error("Expected 'com' node to exist")
+	}
+}
+
+func TestConfigManagerSearch(t *testing.T) {
+	tree := &TrieTree[int]{}
+	config := map[string]int{
+		"*.example.com.": 1,
+		"example.com":    2,
+		"*.example.org":  3,
+		"tld":            4,
+		".":              5,
+		"*.":             6,
+
+		"du p.example.com ": 8,
+		"b..example.com":    9,
+	}
+	tree.BuildNewTree(config)
+	tree.Visualize("ROOT", 0)
+
+	tests := []struct {
+		name      string
+		domain    string
+		wantslice []int
+	}{
+		{`hit`, "a.example.com", []int{1, 6}},
+		{`normalized domain hit`, "a.example.com.", []int{1, 6}},
+		{`multi hit`, "example.com", []int{1, 2, 6}},
+		{`tld hit`, "tld", []int{4, 6}},
+		{`root hit`, ".", []int{5, 6}},
+		{`invalid`, "..", nil},
+		{`whitespace`, "", nil},
+	}
+
+	opt := cmpopts.SortSlices(func(a, b int) bool {
+		return a < b
+	})
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := tree.Search(tt.domain)
+			t.Logf("result: %v\n", results)
+			if diff := cmp.Diff(results, tt.wantslice, opt); diff != "" {
+				t.Errorf("want %v but:%v", tt.wantslice, results)
+			}
+		})
+	}
+}
