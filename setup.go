@@ -19,7 +19,7 @@ func init() { plugin.Register("nftsync", setup) }
 
 func setup(c *caddy.Controller) error {
 
-	ns, err := nftSyncParse(c)
+	ns, err := NftSyncParse(c)
 	if err != nil {
 		return plugin.Error("nftsync", err)
 	}
@@ -38,9 +38,8 @@ func setup(c *caddy.Controller) error {
 	return nil
 }
 
-func nftSyncParse(c *caddy.Controller) (*NftSync, error) {
-	ns := New()
-	cfg := make(map[string]nameMap)
+func NftSyncParse(c *caddy.Controller) (*NftSync, error) {
+	ns := NewNftSync()
 	ns.zoneMetricLabel = dnsserver.GetConfig(c).Zone
 	conn, err := NewConnector()
 	if err != nil {
@@ -64,7 +63,7 @@ func nftSyncParse(c *caddy.Controller) (*NftSync, error) {
 
 		if args[0] == "debug" {
 			log.Infof("mocking netlink connection, zone:%s", ns.zoneMetricLabel)
-			ns.SetConn(NewNetlinkMock())
+			ns.SetConn(NewNetlinkFake())
 			args = args[1:]
 		}
 
@@ -76,7 +75,7 @@ func nftSyncParse(c *caddy.Controller) (*NftSync, error) {
 		}
 
 		//second args may table name
-		table, err := ns.ListTableOfFamily(args[1], ns.family)
+		table, err := ns.conn.ListTableOfFamily(args[1], ns.family)
 		if err != nil {
 			return nil, fmt.Errorf("nftsync Table not found: %s, %v", args[1], err)
 		}
@@ -120,26 +119,32 @@ func nftSyncParse(c *caddy.Controller) (*NftSync, error) {
 				}
 
 				if strings.Contains(nn, "*") {
-					log.Warningf("name contains '*'. "+
-						"regex matching is not supported, sikipping this name: %s", nn)
-					continue
+					return nil, fmt.Errorf("name contains '*'. "+
+						"regex matching is not supported, please consider using the tree flag: %s", nn)
 				}
 
+				// TODO: refactoring
+				// the current Tree implicitly requires a feature that handles `*.`
 				fn := nn
 				if isTree {
 					fn = "*." + nn
 				}
 
-				sets := make([]*nftables.Set, 2)
+				sets := [2]*nftables.Set{}
 				for i, idx := range []int{2, 3} {
-					s, err := ns.GetSetByName(ns.table, args[idx])
+					s, err := ns.conn.GetSetByName(ns.table, args[idx])
 					if err != nil {
 						log.Warningf("nftset not found binding %s, set: %s, %v", nn, args[idx], err)
+					} else {
+						// nil if missing set
+						sets[i] = s
 					}
-					sets[i] = s
 				}
 
-				cfg[fn] = nameMap{v4Set: sets[0], v6Set: sets[1]}
+				// to optimize tree traversal, execute only if the set is found
+				if sets[0] != nil || sets[1] != nil {
+					ns.config[fn] = ipSet{V4: sets[0], V6: sets[1]}
+				}
 
 			default:
 				return nil, c.Errf("unknown property '%s'", c.Val())
@@ -147,7 +152,7 @@ func nftSyncParse(c *caddy.Controller) (*NftSync, error) {
 		}
 	}
 
-	ns.BuildNewTree(cfg)
+	ns.tree.Build(ns.config)
 	return ns, nil
 }
 
