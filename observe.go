@@ -1,13 +1,18 @@
 package nftsync
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	nft "github.com/google/nftables"
 	"github.com/miekg/dns"
 )
 
-const TimeoutOffset uint32 = 5
+const (
+	TimeoutOffset uint32 = 5
+	maxCNAMEHops  int    = 20
+)
 
 type resolvedTarget struct {
 	name       string
@@ -21,11 +26,12 @@ type ResponseWriter struct {
 	dns.ResponseWriter
 	*NftSync
 	server string // Server hanling the request.
+	ctx    context.Context
 }
 
 // NewResponseWriter returns a pointer to a new ResponseWriter
-func NewResponseWriter(srv string, w dns.ResponseWriter, n *NftSync) *ResponseWriter {
-	return &ResponseWriter{server: srv, ResponseWriter: w, NftSync: n}
+func NewResponseWriter(srv string, w dns.ResponseWriter, n *NftSync, c context.Context) *ResponseWriter {
+	return &ResponseWriter{server: srv, ResponseWriter: w, NftSync: n, ctx: c}
 }
 
 func (r *ResponseWriter) WriteMsg(res *dns.Msg) error {
@@ -33,8 +39,12 @@ func (r *ResponseWriter) WriteMsg(res *dns.Msg) error {
 	qname := res.Question[0].Name
 
 	// ignore Additional Section(res.Extra)
-	ns, v4, v6 := extractNameAndIPs(qname, res.Answer, getTTLConverter(r.minttl))
-	err := updateSetByNames(r.NftSync, ns, v4, v6)
+	ns, v4, v6, err := extractNameAndIPs(r.ctx, qname, res.Answer, getTTLConverter(r.minttl))
+	if err != nil {
+		return err
+	}
+
+	err = updateSetByNames(r.NftSync, ns, v4, v6)
 	if err != nil {
 		return err
 	}
@@ -57,7 +67,8 @@ func getTTLConverter(minttl uint32) func(uint32) time.Duration {
 	}
 }
 
-func extractNameAndIPs(qname string, answer []dns.RR, c func(uint32) time.Duration) (names []string, v4Elms, v6Elms []nft.SetElement) {
+func extractNameAndIPs(ctx context.Context, qname string, answer []dns.RR, c func(uint32) time.Duration) (
+	[]string, []nft.SetElement, []nft.SetElement, error) {
 	nodes := make(map[string]*resolvedTarget)
 
 	for _, rr := range answer {
@@ -79,7 +90,23 @@ func extractNameAndIPs(qname string, answer []dns.RR, c func(uint32) time.Durati
 	}
 
 	curr := qname
-	for {
+	var v4Elms, v6Elms []nft.SetElement
+	var names []string
+	visited := make(map[string]bool)
+
+	for i := range maxCNAMEHops {
+		select {
+		case <-ctx.Done():
+			return nil, nil, nil, ctx.Err()
+		default:
+		}
+
+		// loop check
+		if visited[curr] {
+			return nil, nil, nil, fmt.Errorf("CNAME loop detected at %s", curr)
+		}
+		visited[curr] = true
+
 		node, exists := nodes[curr]
 		if !exists {
 			break
@@ -97,8 +124,12 @@ func extractNameAndIPs(qname string, answer []dns.RR, c func(uint32) time.Durati
 			break
 		}
 		curr = node.name
+
+		if i == maxCNAMEHops-1 {
+			return nil, nil, nil, fmt.Errorf("exceeded max CNAME jumps (%d)", maxCNAMEHops)
+		}
 	}
-	return
+	return names, v4Elms, v6Elms, nil
 }
 
 // for mocking addUpdateElementMessage

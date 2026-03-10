@@ -46,7 +46,9 @@ func (t *testHandler) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns
 		d.Extra = t.Response.Extra
 		d.Rcode = t.Response.Rcode
 	}
-	w.WriteMsg(d)
+	if err := w.WriteMsg(d); err != nil {
+		return 1, err
+	}
 	return 0, nil
 }
 
@@ -91,8 +93,9 @@ func TestE2E(t *testing.T) {
 		afterFlushing bool // Whether to flash after the evaluation is complete
 	}{
 		{
-			name:   "test",
-			policy: "sync host example.com. e2e_s4_1 e2e_s6_1",
+			name: "valid",
+			policy: "sync host example.com. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
 			testCase: test.Case{
 				Qname: "example.com.", Qtype: dns.TypeA,
 				Answer: []dns.RR{
@@ -109,6 +112,259 @@ func TestE2E(t *testing.T) {
 				"e2e_s4_4": nil,
 				"e2e_s6_1": nil,
 				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: false,
+		},
+		{
+			name: "check override element",
+			policy: "sync host example.com. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
+			testCase: test.Case{
+				Qname: "example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.A("example.com.	3600	IN	A	192.0.2.1"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name: "check tree",
+			policy: "sync tree example.com. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
+			testCase: test.Case{
+				Qname: "sub.example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.A("sub.example.com.	3600	IN	A	192.0.2.1"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_2": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name: "check tree",
+			policy: "sync tree example.com. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
+			testCase: test.Case{
+				Qname: "example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.A("example.com.	3600	IN	A	192.0.2.1"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name: "check cname chain",
+			policy: "sync host mels.cdn.net. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
+			testCase: test.Case{
+				Qname: "sub.example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.CNAME("sub.example.com.	6000	IN	CNAME	mels.cdn.net."),
+					test.A("mels.cdn.net.	3600	IN	A	192.0.2.1"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_2": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name: "check cname chain(tree)",
+			policy: "sync host mels.cdn.net. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2\n" +
+				"sync tree cdn.net. e2e_s4_3 e2e_s6_3",
+			testCase: test.Case{
+				Qname: "sub.example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.CNAME("sub.example.com.	6000	IN	CNAME	mels.cdn.net."),
+					test.A("mels.cdn.net.	3600	IN	A	192.0.2.1"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_2": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_3": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name: "broken cname chain",
+			policy: "sync host mels.cdn.net. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
+			testCase: test.Case{
+				Qname: "sub.example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.CNAME("sub.example.com.	6000	IN	CNAME	mels.cdn.net."),
+					test.A("broken.cdn.net.	3600	IN	A	192.0.2.1"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": nil,
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name:   "looped cname chain",
+			policy: "sync host mels.cdn.net. e2e_s4_1 e2e_s6_1",
+			testCase: test.Case{
+				Qname: "sub.example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.CNAME("sub.example.com.	6000	IN	CNAME	mels.cdn.net."),
+					test.CNAME("mels.cdn.net.	6000	IN	CNAME	mels.cdn.com."),
+					test.CNAME("mels.cdn.com.	6000	IN	CNAME	mels.cdn.net."),
+					test.A("broken.cdn.net.	3600	IN	A	192.0.2.1"),
+				},
+			},
+			wantErr: true,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": nil,
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name: "multi address",
+			policy: "sync host mels.cdn.net. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
+			testCase: test.Case{
+				Qname: "sub.example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.CNAME("sub.example.com.	6000	IN	CNAME	mels.cdn.net."),
+					test.A("mels.cdn.net.	3600	IN	A	192.0.2.1"),
+					test.A("mels.cdn.net.	3700	IN	A	192.0.2.2"),
+					test.A("mels.cdn.net.	3800	IN	A	192.0.2.3"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+					{Key: netip.MustParseAddr("192.0.2.2").AsSlice(), Timeout: 3705 * time.Second, Expires: 3705 * time.Second},
+					{Key: netip.MustParseAddr("192.0.2.3").AsSlice(), Timeout: 3805 * time.Second, Expires: 3805 * time.Second},
+				},
+				"e2e_s4_2": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+					{Key: netip.MustParseAddr("192.0.2.2").AsSlice(), Timeout: 3705 * time.Second, Expires: 3705 * time.Second},
+					{Key: netip.MustParseAddr("192.0.2.3").AsSlice(), Timeout: 3805 * time.Second, Expires: 3805 * time.Second},
+				},
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name: "multi v6 address",
+			policy: "sync host mels.cdn.net. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
+			testCase: test.Case{
+				Qname: "sub.example.com.", Qtype: dns.TypeAAAA,
+				Answer: []dns.RR{
+					test.CNAME("sub.example.com.	6000	IN	CNAME	mels.cdn.net."),
+					test.AAAA("mels.cdn.net.	3600	IN	AAAA	2001:db8::1"),
+					test.AAAA("mels.cdn.net.	3700	IN	AAAA	2001:db8::2"),
+					test.AAAA("mels.cdn.net.	3800	IN	AAAA	2001:db8::3"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": nil,
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": {
+					{Key: netip.MustParseAddr("2001:db8::1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+					{Key: netip.MustParseAddr("2001:db8::2").AsSlice(), Timeout: 3705 * time.Second, Expires: 3705 * time.Second},
+					{Key: netip.MustParseAddr("2001:db8::3").AsSlice(), Timeout: 3805 * time.Second, Expires: 3805 * time.Second},
+				},
+				"e2e_s6_2": {
+					{Key: netip.MustParseAddr("2001:db8::1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+					{Key: netip.MustParseAddr("2001:db8::2").AsSlice(), Timeout: 3705 * time.Second, Expires: 3705 * time.Second},
+					{Key: netip.MustParseAddr("2001:db8::3").AsSlice(), Timeout: 3805 * time.Second, Expires: 3805 * time.Second},
+				},
 				"e2e_s6_3": nil,
 				"e2e_s6_4": nil,
 			},
@@ -141,16 +397,23 @@ func TestE2E(t *testing.T) {
 				return
 			}
 
-			// Expires allows for some margin of error
-			isExpiresField := func(p cmp.Path) bool {
-				return p.String() == "Expires"
-			}
-			opt := cmp.FilterPath(isExpiresField, cmp.Options{
+			opt := cmp.Options{
+				cmpopts.SortSlices(func(a, b nft.SetElement) bool {
+					addrA, ok := netip.AddrFromSlice(a.Key)
+					if !ok {
+						panic("failed parse addr")
+					}
+					addrB, ok := netip.AddrFromSlice(b.Key)
+					if !ok {
+						panic("failed parse addr")
+					}
+					return addrA.Less(addrB)
+				}),
 				cmp.Transformer("DurationToSeconds", func(d time.Duration) float64 {
 					return d.Seconds()
 				}),
 				cmpopts.EquateApprox(0, 0.5),
-			})
+			}
 
 			for k, v := range setMap {
 				actualElement, err := nftConn.GetSetElements(v)
@@ -170,6 +433,9 @@ func TestE2E(t *testing.T) {
 				if err := nftConn.Flush(); err != nil {
 					t.Fatalf("failed flush set: %v", err)
 				}
+			} else {
+				t.Log("waiting until the 'Expires margin' expires")
+				time.Sleep(time.Second)
 			}
 		})
 	}

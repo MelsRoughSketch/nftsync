@@ -62,7 +62,7 @@ func (n *NftSync) Name() string { return "nftsync" }
 // ServeDNS implements plugin.Handler.
 func (n *NftSync) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	srv := metrics.WithServer(ctx)
-	nw := NewResponseWriter(srv, w, n)
+	nw := NewResponseWriter(srv, w, n, ctx)
 	return plugin.NextOrFailure(n.Name(), n.Next, ctx, nw, r)
 }
 
