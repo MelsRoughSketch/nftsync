@@ -1,13 +1,18 @@
 package nametrie
 
 import (
+	"flag"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
+
+// Ignores flags declared in other packages to simplify test execution.
+var _ = flag.Bool("system_test", false, "")
 
 func (n *node[T]) visualize(label string, depth int) {
 	indent := strings.Repeat("  ", depth)
@@ -29,6 +34,39 @@ func (t *TrieTree[T]) Visualize(label string, depth int) {
 	root := t.current.Load()
 	if root != nil {
 		root.visualize(label, depth)
+	}
+}
+
+func TestGetLabels(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantLabels []string
+		wantOk     bool
+	}{
+		{`valid`, `example.com`, []string{"example", "com"}, true},
+		{`leaf is space`, ` .example.com`, []string{" ", "example", "com"}, true},
+		{`contains space`, `a. .ex ample.com`, []string{"a", " ", "ex ample", "com"}, true},
+		{`root is space`, `example.com. `, []string{"example", "com", " "}, true},
+		{`root only`, `.`, nil, true},
+		{`all leaves`, `*.`, []string{"*"}, true},
+
+		// fails
+		{`null`, ``, nil, false},
+		{`empty leaf`, `a..example.com`, nil, false},
+		{`empty leaf`, `.example.com`, nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, ok := getLabels(tt.input)
+			if !reflect.DeepEqual(tt.wantLabels, s) {
+				t.Errorf("want %v but %v", tt.wantLabels, s)
+			}
+			if ok != tt.wantOk {
+				t.Errorf("want %v but %v", tt.wantOk, ok)
+			}
+		})
 	}
 }
 
@@ -54,13 +92,13 @@ func TestConfigManagerSearch(t *testing.T) {
 		"du p.example.com ": 8,
 		"b..example.com":    9,
 	}
-	tree.BuildNewTree(config)
+	tree.Build(config)
 	tree.Visualize("ROOT", 0)
 
 	tests := []struct {
 		name      string
 		domain    string
-		wantslice []int
+		wantSlice []int
 	}{
 		{`hit`, "a.example.com", []int{1, 6}},
 		{`normalized domain hit`, "a.example.com.", []int{1, 6}},
@@ -79,8 +117,8 @@ func TestConfigManagerSearch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			results := tree.Search(tt.domain)
 			t.Logf("result: %v\n", results)
-			if diff := cmp.Diff(results, tt.wantslice, opt); diff != "" {
-				t.Errorf("want %v but:%v", tt.wantslice, results)
+			if diff := cmp.Diff(results, tt.wantSlice, opt); diff != "" {
+				t.Errorf("want %v but:%v", tt.wantSlice, results)
 			}
 		})
 	}

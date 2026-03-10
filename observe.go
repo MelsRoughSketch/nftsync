@@ -1,24 +1,23 @@
 package nftsync
 
 import (
-	"net"
+	"context"
+	"fmt"
 	"time"
 
 	nft "github.com/google/nftables"
 	"github.com/miekg/dns"
 )
 
-const TimeoutOffset uint32 = 5
+const (
+	TimeoutOffset uint32 = 5
+	maxCNAMEHops  int    = 20
+)
 
-type record struct {
-	ip  net.IP
-	ttl time.Duration
-}
-
-type dnsNode struct {
-	targetName string
-	ipv4       []record
-	ipv6       []record
+type resolvedTarget struct {
+	name       string
+	v4Elements []nft.SetElement
+	v6Elements []nft.SetElement
 }
 
 // ResponseWriter observes the RRs
@@ -27,32 +26,32 @@ type ResponseWriter struct {
 	dns.ResponseWriter
 	*NftSync
 	server string // Server hanling the request.
+	ctx    context.Context
 }
 
 // NewResponseWriter returns a pointer to a new ResponseWriter
-func NewResponseWriter(srv string, w dns.ResponseWriter, n *NftSync) *ResponseWriter {
-	return &ResponseWriter{server: srv, ResponseWriter: w, NftSync: n}
+func NewResponseWriter(srv string, w dns.ResponseWriter, n *NftSync, c context.Context) *ResponseWriter {
+	return &ResponseWriter{server: srv, ResponseWriter: w, NftSync: n, ctx: c}
 }
 
 func (r *ResponseWriter) WriteMsg(res *dns.Msg) error {
-	if len(res.Question) == 0 {
-		log.Debug("question length is zero.")
-		return r.ResponseWriter.WriteMsg(res)
-	}
 
 	qname := res.Question[0].Name
 
 	// ignore Additional Section(res.Extra)
-	n, v4, v6 := extractNameAndIPs(qname, res.Answer, getTTLConverter(r.minttl))
+	ns, v4, v6, err := extractNameAndIPs(r.ctx, qname, res.Answer, getTTLConverter(r.minttl))
+	if err != nil {
+		return err
+	}
 
-	v4elm := convertElement(v4)
-	v6elm := convertElement(v6)
+	err = updateSetByNames(r.NftSync, ns, v4, v6)
+	if err != nil {
+		return err
+	}
 
-	updateSetByNames(r.NftSync, n, v4elm, v6elm)
-	if err := r.Flush(); err != nil {
-		updateFailureCount.WithLabelValues(
-			r.server, r.zoneMetricLabel, r.viewMetricLabel, qname).Inc()
-		log.Error(err)
+	if err := r.conn.Flush(); err != nil {
+		updateFailureCount.WithLabelValues(r.server, r.zoneMetricLabel, r.viewMetricLabel, qname).Inc()
+		return err
 	}
 
 	return r.ResponseWriter.WriteMsg(res)
@@ -68,73 +67,87 @@ func getTTLConverter(minttl uint32) func(uint32) time.Duration {
 	}
 }
 
-func extractNameAndIPs(qname string, answer []dns.RR, c func(uint32) time.Duration) (names []string, ipv4 []record, ipv6 []record) {
-	nodes := make(map[string]*dnsNode)
+func extractNameAndIPs(ctx context.Context, qname string, answer []dns.RR, c func(uint32) time.Duration) (
+	[]string, []nft.SetElement, []nft.SetElement, error) {
+	nodes := make(map[string]*resolvedTarget)
 
 	for _, rr := range answer {
 		h := rr.Header()
-		n := h.Name
+		name := h.Name
 
-		if nodes[n] == nil {
-			nodes[n] = &dnsNode{}
+		if nodes[name] == nil {
+			nodes[name] = &resolvedTarget{}
 		}
 
 		switch res := rr.(type) {
 		case *dns.CNAME:
-			nodes[n].targetName = res.Target
+			nodes[name].name = res.Target
 		case *dns.A:
-			nodes[n].ipv4 = append(nodes[n].ipv4, record{ip: res.A, ttl: c(h.Ttl)})
+			nodes[name].v4Elements = append(nodes[name].v4Elements, nft.SetElement{Key: res.A.To4(), Timeout: c(h.Ttl)})
 		case *dns.AAAA:
-			nodes[n].ipv6 = append(nodes[n].ipv6, record{ip: res.AAAA, ttl: c(h.Ttl)})
+			nodes[name].v6Elements = append(nodes[name].v6Elements, nft.SetElement{Key: res.AAAA.To16(), Timeout: c(h.Ttl)})
 		}
 	}
 
 	curr := qname
-	for {
-		node, offset := nodes[curr]
-		if !offset {
+	var v4Elms, v6Elms []nft.SetElement
+	var names []string
+	visited := make(map[string]bool)
+
+	for i := range maxCNAMEHops {
+		select {
+		case <-ctx.Done():
+			return nil, nil, nil, ctx.Err()
+		default:
+		}
+
+		// loop check
+		if visited[curr] {
+			return nil, nil, nil, fmt.Errorf("CNAME loop detected at %s", curr)
+		}
+		visited[curr] = true
+
+		node, exists := nodes[curr]
+		if !exists {
 			break
 		}
 
 		names = append(names, curr)
-		if node.ipv4 != nil {
-			ipv4 = append(ipv4, node.ipv4...)
+		if node.v4Elements != nil {
+			v4Elms = append(v4Elms, node.v4Elements...)
 		}
-		if node.ipv6 != nil {
-			ipv6 = append(ipv6, node.ipv6...)
+		if node.v6Elements != nil {
+			v6Elms = append(v6Elms, node.v6Elements...)
 		}
 
-		if node.targetName == "" {
+		if node.name == "" {
 			break
 		}
-		curr = node.targetName
+		curr = node.name
+
+		if i == maxCNAMEHops-1 {
+			return nil, nil, nil, fmt.Errorf("exceeded max CNAME jumps (%d)", maxCNAMEHops)
+		}
 	}
-	return
+	return names, v4Elms, v6Elms, nil
 }
 
-func convertElement(rs []record) []nft.SetElement {
-	e := make([]nft.SetElement, 0, len(rs))
-	for _, r := range rs {
-		e = append(e, nft.SetElement{Key: r.ip, Timeout: r.ttl})
-	}
-	return e
-}
+// for mocking addUpdateElementMessage
+type elementUpdater func(NetlinkConn, *nft.Set, []nft.SetElement) error
 
-func updateSetByNames(ns *NftSync, names []string, v4elm []nft.SetElement, v6elm []nft.SetElement) {
+var addUpdateElementFunc elementUpdater = addUpdateElementMessage
+
+func updateSetByNames(ns *NftSync, names []string, v4, v6 []nft.SetElement) error {
 	for _, n := range names {
-		set := ns.Search(n)
-		for _, s := range set {
-			if err := addUpdateElementMessage(ns.NetlinkConn, s.v4Set, v4elm); err != nil {
-				loggingFailure(s.v4Set, v4elm, err)
+		sets := ns.tree.Search(n)
+		for _, s := range sets {
+			if err := addUpdateElementFunc(ns.conn, s.V4, v4); err != nil {
+				return err
 			}
-			if err := addUpdateElementMessage(ns.NetlinkConn, s.v6Set, v6elm); err != nil {
-				loggingFailure(s.v6Set, v6elm, err)
+			if err := addUpdateElementFunc(ns.conn, s.V6, v6); err != nil {
+				return err
 			}
 		}
 	}
-}
-
-func loggingFailure(s *nft.Set, e []nft.SetElement, err error) {
-	log.Errorf("failed add message for update set:%s, elm:%v, %v\n",
-		getSetFullName(s), e, err)
+	return nil
 }

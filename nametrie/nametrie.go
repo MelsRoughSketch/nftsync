@@ -24,7 +24,6 @@ func newNode[T any]() *node[T] {
 // a.example.com. -> [a example com]
 // If the root is specified return nil
 func getLabels(domain string) ([]string, bool) {
-	domain = strings.TrimSpace(domain)
 	if domain == "" {
 		return nil, false
 	}
@@ -75,13 +74,12 @@ type TrieTree[T any] struct {
 	current atomic.Pointer[node[T]]
 }
 
-func (t *TrieTree[T]) BuildNewTree(config map[string]T) {
+func (t *TrieTree[T]) Build(config map[string]T) {
 	root := newNode[T]()
 	for domain, value := range config {
 		root.insert(domain, value)
 	}
 	t.current.Store(root)
-
 }
 
 // Search looks for the domain in the Trie and returns all matching values

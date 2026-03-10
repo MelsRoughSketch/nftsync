@@ -1,4 +1,17 @@
+destroy table inet t
 add table inet t
 add set inet t s4{type ipv4_addr; flags timeout,dynamic;}
 add set inet t s6{type ipv6_addr; flags timeout,dynamic;}
 add set inet t e{type ipv4_addr; flags timeout,dynamic;}
+
+destroy table inet e2e_test
+add table inet e2e_test
+add set inet e2e_test e2e_s4_1{type ipv4_addr; flags timeout,dynamic;}
+add set inet e2e_test e2e_s4_2{type ipv4_addr; flags timeout,dynamic;}
+add set inet e2e_test e2e_s4_3{type ipv4_addr; flags timeout,dynamic;}
+add set inet e2e_test e2e_s4_4{type ipv4_addr; flags timeout,dynamic;}
+
+add set inet e2e_test e2e_s6_1{type ipv6_addr; flags timeout,dynamic;}
+add set inet e2e_test e2e_s6_2{type ipv6_addr; flags timeout,dynamic;}
+add set inet e2e_test e2e_s6_3{type ipv6_addr; flags timeout,dynamic;}
+add set inet e2e_test e2e_s6_4{type ipv6_addr; flags timeout,dynamic;}
