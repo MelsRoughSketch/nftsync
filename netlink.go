@@ -30,7 +30,6 @@ func addUpdateElementMessage(n NetlinkConn, s *nftables.Set, e []nftables.SetEle
 		return nil
 	}
 
-	log.Info(s, e)
 	if err := n.SetDestroyElements(s, e); err != nil {
 		return fmt.Errorf("failed add message for destroy elm, set:%s, elm:%v, %v\n",
 			getSetFullName(s), e, err)

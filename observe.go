@@ -72,9 +72,9 @@ func extractNameAndIPs(qname string, answer []dns.RR, c func(uint32) time.Durati
 		case *dns.CNAME:
 			nodes[name].name = res.Target
 		case *dns.A:
-			nodes[name].v4Elements = append(nodes[name].v4Elements, nft.SetElement{Key: res.A, Timeout: c(h.Ttl)})
+			nodes[name].v4Elements = append(nodes[name].v4Elements, nft.SetElement{Key: res.A.To4(), Timeout: c(h.Ttl)})
 		case *dns.AAAA:
-			nodes[name].v6Elements = append(nodes[name].v6Elements, nft.SetElement{Key: res.AAAA, Timeout: c(h.Ttl)})
+			nodes[name].v6Elements = append(nodes[name].v6Elements, nft.SetElement{Key: res.AAAA.To16(), Timeout: c(h.Ttl)})
 		}
 	}
 
