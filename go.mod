@@ -8,7 +8,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/nftables v0.3.1-0.20251119083706-1db35da82052
 	github.com/miekg/dns v1.1.72
-	github.com/prometheus/client_golang v1.23.0
+	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 )
 
