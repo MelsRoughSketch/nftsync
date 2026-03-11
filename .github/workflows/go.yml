@@ -22,12 +22,14 @@ jobs:
     - name: Ensure all files were formatted as per gofmt
       run: |
         [ "$(gofmt -l $(find . -name '*.go') 2>&1)" = "" ]
+    
+    - name: Run go vet
+      run : go vet .
 
     - name: Test
       run: |
-        go vet .
         go test ./...
-        sudo nft --debug=all -f .devcontainer/nftsetup.nft
+        sudo nft -f .devcontainer/nftsetup.nft
         go test -c github.com/MelsRoughSketch/nftsync
         sudo ./nftsync.test -test.v -system_test
         go test -c github.com/MelsRoughSketch/nftsync/integration
