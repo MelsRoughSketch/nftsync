@@ -97,7 +97,7 @@ func NftSyncParse(c *caddy.Controller) (*NftSync, error) {
 
 		if len(args) == 3 {
 			// last args may be just a number, then it is the ttl
-			if ttl, err := strconv.Atoi(args[2]); err == nil {
+			if ttl, err := strconv.ParseUint(args[2], 10, 32); err == nil {
 				if ttl <= 0 {
 					return nil, fmt.Errorf("nftsync minTTL can not be zero or negative: %d", ttl)
 				}
