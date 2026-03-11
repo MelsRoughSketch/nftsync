@@ -16,7 +16,19 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.26'
+        go-version: ^1.20
+      id: go
+    
+    - name: Ensure all files were formatted as per gofmt
+      run: |
+        [ "$(gofmt -l $(find . -name '*.go') 2>&1)" = "" ]
 
     - name: Test
-      run: go test -v ./...
+      run: |
+        go vet .
+        go test ./...
+        sudo nft --debug=all -f .devcontainer/nftsetup.nft
+        go test -c github.com/MelsRoughSketch/nftsync
+        sudo ./nftsync.test -test.v -system_test
+        go test -c github.com/MelsRoughSketch/nftsync/integration
+        sudo ./integration.test -test.v -system_test
