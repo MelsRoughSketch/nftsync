@@ -10,10 +10,32 @@ This is an **unofficial** plugin for [CoreDNS](https://coredns.io/).
 ## Syntax
 ```txt
 nftsync [debug] FAMILY TABLE_NAME [MINTTL] {
-  sync host|tree NAME IPv4_SET_NAME IPv6_SET_NAME
+        sync host|tree NAME IPv4_SET_NAME IPv6_SET_NAME
 }
 ```
-* `debug` will mocks Netlink socket.
+* `debug` will mocks Netlink socket to fake connection.
+It also records the operation it attempted to perform to stdout.
+It simulates the presence of the following nftables configuration. 
+```txt
+  table inet t {
+          set s4 {
+                  type ipv4_addr
+                  flags dynamic,timeout
+          }
+
+          set s6 {
+                  type ipv6_addr
+                  flags dynamic,timeout
+          }
+
+          // This set exists at startup
+          // but always behaves as if it fails when updating elements.
+          set e {
+                  type ipv4_addr
+                  flags dynamic,timeout
+          }
+  }
+  ```
 
 * **FAMILY** and **TABLE_NAME** are the nftables table and its family containing the target sets.
 
@@ -25,11 +47,12 @@ equal to or greater than the minimum `minTTL` specified in the *cache* plugin co
 
 * `sync` - qname of a request, or a name used in a CNAME contained within RRs, matches the `NAME`, 
 add the result of the A record to `IPv4_SET_NAME` and the result of the AAAA record to `IPv6_SET_NAME`.<br>
-When adding query results to a `nftset`, **the timeout/expires parameters of the set elements are updated atomically** 
-via Netlink socket.
-Elements are only removed by timeout parameter. 
+  * When adding query results to a `nftset`, **the `Timeout`/`Expires` parameters of the set elements are updated atomically** 
+via Netlink socket. 
+These parameters will be set to values that include a small margin (5 seconds) added to the entry's TTL.<br>
+Elements are only removed by `Expires`. 
 When a query resolves, old IPs are not explicitly cleared.<br>
-*Note: Results returned in the `additional section` are **not** processed by nftsync.*
+***Note:** Results returned in the `additional section` are **not** processed by nftsync.*
 
 * `host|tree` - when you want to target all leaves of `NAME` 
 (if specifying each hostname individually is cumbersome), using `tree` will target all subdomains.
@@ -39,7 +62,9 @@ You can declare as many `sync`s consecutively as you like.
 ## Metrics
 If monitoring is enabled (via the *prometheus* plugin) then the following metrics are exported:
 
-* This section is currently under preparation.
+* `coredns_nftsync_update_failure_count_total{"server", "zone", "view", "name"}` - Counter for the number of failed updates to ip elements. <br>
+If this value is increasing, it is likely that set operations failed due to factors such as the set being deleted after the CoreDNS startup.
+
 
 ## Examples
 In this configration, `nftsync` adds the IP address to set s4/s6 when a response related to example.org is returned. <br>
@@ -47,10 +72,10 @@ This setting applies not only to **example.org**. but also to subdomains such as
 
 ```txt
 . {
-  forward . 9.9.9.9
-  nftsync inet t {
-    sync tree example.org s4 s6
-  }
+        forward . 9.9.9.9
+        nftsync inet t {
+                sync tree example.org s4 s6
+        }
 }
 ```
 At this point, the nftables configuration looks like this:
@@ -71,10 +96,10 @@ table inet t {
 ```
 
 ## Considerations
-1. **currently under development**
-2. only works on Linux
-3. requires POSIX capabilities for Netlink
-4. I recommend placing *nftsync* after *cache*
+1. Only works on Linux
+2. Requires POSIX capabilities for Netlink
+3. I recommend placing *nftsync* after *cache*
+4. Currently, it is not possible to specify a particular namespace.
 
 ---
 ### Regarding the possibility of race conditions
