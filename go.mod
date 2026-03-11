@@ -3,7 +3,7 @@ module github.com/MelsRoughSketch/nftsync
 go 1.26.0
 
 require (
-	github.com/coredns/caddy v1.1.4-0.20250930002214-15135a999495
+	github.com/coredns/caddy v1.1.4
 	github.com/coredns/coredns v1.14.2
 	github.com/google/go-cmp v0.7.0
 	github.com/google/nftables v0.3.1-0.20251119083706-1db35da82052
