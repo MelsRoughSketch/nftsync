@@ -1,3 +1,5 @@
+[![Build Status](https://github.com/MelsRoughSketch/nftsync/actions/workflows/test.yml/badge.svg)](https://github.com/MelsRoughSketch/nftsync/actions/workflows/test.yml)
+
 # What is this
 This is an **unofficial** plugin for [CoreDNS](https://coredns.io/).
 
@@ -111,22 +113,3 @@ The following settings are recommended:
 * Avoid using the **EXACTLY THE SAME** domain name settings across multiple query routings<br>
 (When the destination is AD or similar and the resolved domain name is local, 
 duplicates are allowed, but use a different set pair.)
-
-
-## LICENSE
-**All Right Reserved** For Now. <br>
-Copyright (c) [2026] [MelsRoughSketch]
-   All rights reserved.
-   No part of this software may be reproduced, distributed, 
-   or transmitted in any form or by any means, including photocopying, 
-   recording, or other electronic or mechanical methods, without the prior
-   written permission of the copyright holder.
-
-## DISCLAIMER
-   This repository may be released under a more permissive license.
-   In such a cases only, the following disclaimer shall apply:
-      Under no circumstances shall I have any liability to you for 
-      any loss or damage of any kind incurred as a result of the
-      use of this project. Your use of the project and your reliance 
-      on any information is solely at your own risk.
-   (As mentioned earlier, it is All rights reserved for now.) 
