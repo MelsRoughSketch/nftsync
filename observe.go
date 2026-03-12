@@ -58,7 +58,7 @@ func (r *ResponseWriter) WriteMsg(res *dns.Msg) error {
 		return err
 	}
 
-	err = updateSetByNames(r.NftSync, ns, v4, v6)
+	err = r.NftSync.updateSetByNames(ns, v4, v6)
 	if err != nil {
 		return err
 	}
@@ -144,24 +144,4 @@ func extractNameAndIPs(ctx context.Context, qname string, answer []dns.RR, c fun
 		}
 	}
 	return names, v4Elms, v6Elms, nil
-}
-
-// for mocking addUpdateElementMessage
-type elementUpdater func(NetlinkConn, *nft.Set, []nft.SetElement) error
-
-var addUpdateElementFunc elementUpdater = addUpdateElementMessage
-
-func updateSetByNames(ns *NftSync, names []string, v4, v6 []nft.SetElement) error {
-	for _, n := range names {
-		sets := ns.tree.Search(n)
-		for _, s := range sets {
-			if err := addUpdateElementFunc(ns.conn, s.V4, v4); err != nil {
-				return err
-			}
-			if err := addUpdateElementFunc(ns.conn, s.V6, v6); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

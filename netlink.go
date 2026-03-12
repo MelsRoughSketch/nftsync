@@ -15,7 +15,6 @@
 package nftsync
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/google/nftables"
@@ -36,24 +35,6 @@ func NewConnector() (NetlinkConn, error) {
 		return nil, err
 	}
 	return c, nil
-}
-
-// addUpdateElementMessage adds message for atomic replace elements.
-func addUpdateElementMessage(n NetlinkConn, s *nftables.Set, e []nftables.SetElement) error {
-	if len(e) == 0 || s == nil {
-		return nil
-	}
-
-	if err := n.SetDestroyElements(s, e); err != nil {
-		return fmt.Errorf("failed add message for destroy elm, set:%s, elm:%v, %v\n",
-			getSetFullName(s), e, err)
-	}
-
-	if err := n.SetAddElements(s, e); err != nil {
-		return fmt.Errorf("failed add message for add elm, set:%s, elm:%v, %v\n",
-			getSetFullName(s), e, err)
-	}
-	return nil
 }
 
 func getStringFamily(f nftables.TableFamily) string {

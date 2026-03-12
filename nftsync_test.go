@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MelsRoughSketch/nftsync/nametrie"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/google/go-cmp/cmp"
@@ -26,7 +27,61 @@ import (
 	nft "github.com/google/nftables"
 )
 
-func TestAddUpdateElementMessage(t *testing.T) {
+// TestUpdateSetByNames is integration test.
+// It is not test what was specifically written.
+func TestUpdateSetByNames(t *testing.T) {
+	tests := []struct {
+		name          string
+		iNames        []string
+		iV4           []nft.SetElement
+		iV6           []nft.SetElement
+		wantUpdateElm bool
+		wantErr       bool
+	}{
+		{
+			"happy path",
+			[]string{"example.com."},
+			[]nft.SetElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
+			[]nft.SetElement{{Key: netip.MustParseAddr("2001:db8::1").AsSlice()}},
+			true,
+			false,
+		},
+		{
+			"not hit",
+			[]string{"example.org."},
+			[]nft.SetElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
+			[]nft.SetElement{{Key: netip.MustParseAddr("2001:db8::1").AsSlice()}},
+			false,
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ns := NewNftSync()
+			fake := NewNetlinkFake()
+			ns.SetConn(fake)
+			ns.SetTree(&nametrie.TrieTree[ipSet]{})
+			ns.tree.Build(map[string]ipSet{
+				"example.com.": {V4: &nft.Set{Name: "s4"}, V6: &nft.Set{Name: "s6"}},
+			})
+
+			err := ns.updateSetByNames(tt.iNames, tt.iV4, tt.iV6)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			gotUpdated := len(fake.m) > 0
+			if gotUpdated != tt.wantUpdateElm {
+				t.Errorf("update want %v, but %v", tt.wantUpdateElm, gotUpdated)
+			}
+		})
+	}
+}
+
+func TestAddUpdatingElementMessage(t *testing.T) {
 	ns := NewNetlinkFake()
 	v4Set, v6Set, err := getDefaultSet(t, ns)
 	if err != nil {
@@ -148,7 +203,7 @@ func TestAddUpdateElementMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			defer func() { ns.m = nil }()
-			err := addUpdateElementMessage(ns, tt.iSet, tt.iElm)
+			err := addUpdatingElementMessage(ns, tt.iSet, tt.iElm)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

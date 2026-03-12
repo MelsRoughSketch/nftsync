@@ -16,19 +16,22 @@ package nftsync
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/MelsRoughSketch/nftsync/nametrie"
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/metrics"
 	"github.com/coredns/coredns/plugin/pkg/dnsutil"
-	"github.com/google/nftables"
+	nft "github.com/google/nftables"
 	"github.com/miekg/dns"
 )
 
+const defaultMinTTL = uint32(dnsutil.MinimalDefaultTTL / time.Second)
+
 type ipSet struct {
-	V4 *nftables.Set
-	V6 *nftables.Set
+	V4 *nft.Set
+	V6 *nft.Set
 }
 
 // Tree is an object that functions like a map linking domain names to sets.
@@ -44,8 +47,8 @@ type NftSync struct {
 	conn NetlinkConn
 
 	tree   Tree
-	family nftables.TableFamily
-	table  *nftables.Table
+	family nft.TableFamily
+	table  *nft.Table
 	minttl uint32
 	config map[string]ipSet
 
@@ -80,4 +83,35 @@ func (n *NftSync) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	return plugin.NextOrFailure(n.Name(), n.Next, ctx, nw, r)
 }
 
-const defaultMinTTL = uint32(dnsutil.MinimalDefaultTTL / time.Second)
+func (ns *NftSync) updateSetByNames(names []string, v4, v6 []nft.SetElement) error {
+	for _, n := range names {
+		sets := ns.tree.Search(n)
+		for _, s := range sets {
+			if err := addUpdatingElementMessage(ns.conn, s.V4, v4); err != nil {
+				return err
+			}
+			if err := addUpdatingElementMessage(ns.conn, s.V6, v6); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// addUpdatingElementMessage adds message for atomic replace elements.
+func addUpdatingElementMessage(n NetlinkConn, s *nft.Set, e []nft.SetElement) error {
+	if len(e) == 0 || s == nil {
+		return nil
+	}
+
+	if err := n.SetDestroyElements(s, e); err != nil {
+		return fmt.Errorf("failed add message for destroy elm, set:%s, elm:%v, %v\n",
+			getSetFullName(s), e, err)
+	}
+
+	if err := n.SetAddElements(s, e); err != nil {
+		return fmt.Errorf("failed add message for add elm, set:%s, elm:%v, %v\n",
+			getSetFullName(s), e, err)
+	}
+	return nil
+}
