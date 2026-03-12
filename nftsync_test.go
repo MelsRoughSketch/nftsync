@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MelsRoughSketch/nftsync/nametrie"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/google/go-cmp/cmp"
@@ -27,31 +26,196 @@ import (
 	nft "github.com/google/nftables"
 )
 
+// type Tree interface {
+// 	Search(string) []ipSet
+// 	Build(map[string]ipSet)
+// }
+
+// treeStab implements Tree.
+type treeStab struct {
+	searchStab func(string) []ipSet
+}
+
+func (t *treeStab) Search(s string) []ipSet { return t.searchStab(s) }
+func (t *treeStab) Build(map[string]ipSet)  {}
+
 // TestUpdateSetByNames is integration test.
-// It is not test what was specifically written.
 func TestUpdateSetByNames(t *testing.T) {
 	tests := []struct {
-		name          string
-		iNames        []string
-		iV4           []nft.SetElement
-		iV6           []nft.SetElement
-		wantUpdateElm bool
+		name   string
+		iNames []string
+		iV4    []nft.SetElement
+		iV6    []nft.SetElement
+
+		// since it's difficult to sort results and expected values in strict weak order
+		// while preserving the message type sequence, so fixing the return value of Search()
+		treeStab func(string) []ipSet
+
+		wantUpdateElm []fakeSetMessage
 		wantErr       bool
 	}{
 		{
 			"happy path",
 			[]string{"example.com."},
-			[]nft.SetElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
-			[]nft.SetElement{{Key: netip.MustParseAddr("2001:db8::1").AsSlice()}},
-			true,
+			[]nft.SetElement{
+				{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
+				{Key: netip.MustParseAddr("192.0.2.2").AsSlice()},
+			},
+			[]nft.SetElement{
+				{Key: netip.MustParseAddr("2001:db8::1").AsSlice()},
+				{Key: netip.MustParseAddr("2001:db8::2").AsSlice()},
+			},
+			func(s string) []ipSet {
+				return []ipSet{
+					{&nft.Set{Name: "s4_1"}, &nft.Set{Name: "s6_1"}},
+					{&nft.Set{Name: "s4_2"}, &nft.Set{Name: "s6_2"}},
+				}
+			},
+			[]fakeSetMessage{
+				// we first want the destroy msg, then an add msg
+				{
+					&nft.Set{Name: "s4_1"},
+					[]fakeElement{
+						{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
+						{Key: netip.MustParseAddr("192.0.2.2").AsSlice()},
+					},
+					destroy,
+				},
+				{
+					&nft.Set{Name: "s4_1"},
+					[]fakeElement{
+						{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
+						{Key: netip.MustParseAddr("192.0.2.2").AsSlice()},
+					},
+					add,
+				},
+
+				{
+					&nft.Set{Name: "s6_1"},
+					[]fakeElement{
+						{Key: netip.MustParseAddr("2001:db8::1").AsSlice()},
+						{Key: netip.MustParseAddr("2001:db8::2").AsSlice()},
+					},
+					destroy,
+				},
+				{
+					&nft.Set{Name: "s6_1"},
+					[]fakeElement{
+						{Key: netip.MustParseAddr("2001:db8::1").AsSlice()},
+						{Key: netip.MustParseAddr("2001:db8::2").AsSlice()},
+					},
+					add,
+				},
+
+				{
+					&nft.Set{Name: "s4_2"},
+					[]fakeElement{
+						{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
+						{Key: netip.MustParseAddr("192.0.2.2").AsSlice()},
+					},
+					destroy,
+				},
+				{
+					&nft.Set{Name: "s4_2"},
+					[]fakeElement{
+						{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
+						{Key: netip.MustParseAddr("192.0.2.2").AsSlice()},
+					},
+					add,
+				},
+
+				{
+					&nft.Set{Name: "s6_2"},
+					[]fakeElement{
+						{Key: netip.MustParseAddr("2001:db8::1").AsSlice()},
+						{Key: netip.MustParseAddr("2001:db8::2").AsSlice()},
+					},
+					destroy,
+				},
+				{
+					&nft.Set{Name: "s6_2"},
+					[]fakeElement{
+						{Key: netip.MustParseAddr("2001:db8::1").AsSlice()},
+						{Key: netip.MustParseAddr("2001:db8::2").AsSlice()},
+					},
+					add,
+				},
+			},
 			false,
 		},
 		{
-			"not hit",
-			[]string{"example.org."},
-			[]nft.SetElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
-			[]nft.SetElement{{Key: netip.MustParseAddr("2001:db8::1").AsSlice()}},
+			"multi names and only one family",
+			[]string{"example.com.", "sub.example.com."},
+			[]nft.SetElement{
+				{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
+			},
+			nil,
+			func(s string) []ipSet { return []ipSet{{&nft.Set{Name: "s4_1"}, &nft.Set{Name: "s6_1"}}} },
+			[]fakeSetMessage{
+				{
+					&nft.Set{Name: "s4_1"},
+					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
+					destroy,
+				},
+				{
+					&nft.Set{Name: "s4_1"},
+					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
+					add,
+				},
+
+				{
+					&nft.Set{Name: "s4_1"},
+					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
+					destroy,
+				},
+				{
+					&nft.Set{Name: "s4_1"},
+					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
+					add,
+				},
+			},
 			false,
+		},
+		{
+			"set object nil",
+			[]string{"example.com."},
+			[]nft.SetElement{
+				{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
+			},
+			[]nft.SetElement{
+				{Key: netip.MustParseAddr("2001:db8::1").AsSlice()},
+			},
+			func(s string) []ipSet { return []ipSet{{&nft.Set{Name: "s4_1"}, nil}} },
+			[]fakeSetMessage{
+				{
+					&nft.Set{Name: "s4_1"},
+					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
+					destroy,
+				},
+				{
+					&nft.Set{Name: "s4_1"},
+					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
+					add,
+				},
+			},
+			false,
+		},
+		{
+			"nil elements",
+			[]string{"example.com."},
+			nil,
+			nil,
+			func(s string) []ipSet { return []ipSet{{&nft.Set{Name: "s4_1"}, &nft.Set{Name: "s6_1"}}} },
+			nil,
+			false,
+		},
+		{
+			"empty elements",
+			[]string{"example.com."},
+			[]nft.SetElement{},
+			[]nft.SetElement{},
+			func(s string) []ipSet { return []ipSet{{&nft.Set{Name: "s4_1"}, &nft.Set{Name: "s6_1"}}} },
+			nil,
 			false,
 		},
 	}
@@ -61,10 +225,7 @@ func TestUpdateSetByNames(t *testing.T) {
 			ns := NewNftSync()
 			fake := NewNetlinkFake()
 			ns.SetConn(fake)
-			ns.SetTree(&nametrie.TrieTree[ipSet]{})
-			ns.tree.Build(map[string]ipSet{
-				"example.com.": {V4: &nft.Set{Name: "s4"}, V6: &nft.Set{Name: "s6"}},
-			})
+			ns.SetTree(&treeStab{searchStab: tt.treeStab})
 
 			err := ns.updateSetByNames(tt.iNames, tt.iV4, tt.iV6)
 			if tt.wantErr {
@@ -73,9 +234,8 @@ func TestUpdateSetByNames(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			gotUpdated := len(fake.m) > 0
-			if gotUpdated != tt.wantUpdateElm {
-				t.Errorf("update want %v, but %v", tt.wantUpdateElm, gotUpdated)
+			if diff := cmp.Diff(fake.m, tt.wantUpdateElm, cmpopts.IgnoreFields(nft.Set{}, "KeyType", "DataType")); diff != "" {
+				t.Error(diff)
 			}
 		})
 	}
