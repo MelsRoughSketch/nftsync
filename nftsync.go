@@ -83,16 +83,14 @@ func (n *NftSync) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	return plugin.NextOrFailure(n.Name(), n.Next, ctx, nw, r)
 }
 
-func (ns *NftSync) updateSetByNames(names []string, v4, v6 []nft.SetElement) error {
-	for _, n := range names {
-		sets := ns.tree.Search(n)
-		for _, s := range sets {
-			if err := addUpdatingElementMessage(ns.conn, s.V4, v4); err != nil {
-				return err
-			}
-			if err := addUpdatingElementMessage(ns.conn, s.V6, v6); err != nil {
-				return err
-			}
+func (ns *NftSync) updateSetByName(name string, v4, v6 []nft.SetElement) error {
+	sets := ns.tree.Search(name)
+	for _, s := range sets {
+		if err := addUpdatingElementMessage(ns.conn, s.V4, v4); err != nil {
+			return err
+		}
+		if err := addUpdatingElementMessage(ns.conn, s.V6, v6); err != nil {
+			return err
 		}
 	}
 	return nil
