@@ -49,18 +49,31 @@ func NewResponseWriter(srv string, w dns.ResponseWriter, n *NftSync, c context.C
 }
 
 func (r *ResponseWriter) WriteMsg(res *dns.Msg) error {
-
 	qname := res.Question[0].Name
+	ttlConverter := getTTLConverter(r.minttl)
 
-	// ignore Additional Section(res.Extra)
-	ns, v4, v6, err := extractNameAndIPs(r.ctx, qname, res.Answer, getTTLConverter(r.minttl))
-	if err != nil {
-		return err
-	}
+	switch res.Question[0].Qtype {
+	// handling queries that return results in the answer section
+	case dns.TypeA, dns.TypeAAAA:
+		names, v4, v6, err := parseAnswer(r.ctx, qname, res.Answer, ttlConverter)
+		if err != nil {
+			return err
+		}
+		for _, n := range names {
+			if err = r.NftSync.updateSetByName(n, v4, v6); err != nil {
+				return err
+			}
+		}
 
-	err = r.NftSync.updateSetByNames(ns, v4, v6)
-	if err != nil {
-		return err
+	// handling queries that initiate a new communication using info from additional section
+	case dns.TypeNS, dns.TypeMX, dns.TypeSRV, dns.TypeSVCB, dns.TypeHTTPS:
+		for n, results := range parseExtra(qname, res.Extra, ttlConverter) {
+			if err := r.NftSync.updateSetByName(n, results.v4Elements, results.v6Elements); err != nil {
+				return err
+			}
+		}
+
+	default:
 	}
 
 	if err := r.conn.Flush(); err != nil {
@@ -81,7 +94,7 @@ func getTTLConverter(minttl uint32) func(uint32) time.Duration {
 	}
 }
 
-func extractNameAndIPs(ctx context.Context, qname string, answer []dns.RR, c func(uint32) time.Duration) (
+func parseAnswer(ctx context.Context, qname string, answer []dns.RR, c func(uint32) time.Duration) (
 	[]string, []nft.SetElement, []nft.SetElement, error) {
 	nodes := make(map[string]*resolvedTarget)
 
@@ -144,4 +157,29 @@ func extractNameAndIPs(ctx context.Context, qname string, answer []dns.RR, c fun
 		}
 	}
 	return names, v4Elms, v6Elms, nil
+}
+
+func parseExtra(qname string, extra []dns.RR, c func(uint32) time.Duration) map[string]*resolvedTarget {
+	results := make(map[string]*resolvedTarget, len(extra))
+
+	for _, rr := range extra {
+		h := rr.Header()
+		name := h.Name
+
+		// in-domain check
+		if !dns.IsSubDomain(qname, name) {
+			continue
+		}
+
+		if results[name] == nil {
+			results[name] = &resolvedTarget{}
+		}
+		switch res := rr.(type) {
+		case *dns.A:
+			results[name].v4Elements = append(results[name].v4Elements, nft.SetElement{Key: res.A.To4(), Timeout: c(h.Ttl)})
+		case *dns.AAAA:
+			results[name].v6Elements = append(results[name].v6Elements, nft.SetElement{Key: res.AAAA.To16(), Timeout: c(h.Ttl)})
+		}
+	}
+	return results
 }

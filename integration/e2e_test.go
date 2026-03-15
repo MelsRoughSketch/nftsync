@@ -157,6 +157,31 @@ func TestE2E(t *testing.T) {
 			afterFlushing: true,
 		},
 		{
+			name: "uppercase setting",
+			policy: "sync host Example.com. e2e_s4_1 e2e_s6_1\n" +
+				"sync host sub.Example.com. e2e_s4_2 e2e_s6_2",
+			testCase: test.Case{
+				Qname: "example.com.", Qtype: dns.TypeA,
+				Answer: []dns.RR{
+					test.A("example.com.	3600	IN	A	192.0.2.1"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
+				},
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
 			name: "check tree",
 			policy: "sync tree example.com. e2e_s4_1 e2e_s6_1\n" +
 				"sync host sub.example.com. e2e_s4_2 e2e_s6_2",
@@ -379,6 +404,128 @@ func TestE2E(t *testing.T) {
 					{Key: netip.MustParseAddr("2001:db8::2").AsSlice(), Timeout: 3705 * time.Second, Expires: 3705 * time.Second},
 					{Key: netip.MustParseAddr("2001:db8::3").AsSlice(), Timeout: 3805 * time.Second, Expires: 3805 * time.Second},
 				},
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name:   "not found mx(extra) records",
+			policy: "sync tree example.org. e2e_s4_1 e2e_s6_1",
+			testCase: test.Case{
+				Qname: "example.org.", Qtype: dns.TypeMX,
+				Answer: []dns.RR{},
+				Extra:  []dns.RR{},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": nil,
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name:   "mx query",
+			policy: "sync host smtp.example.org. e2e_s4_1 e2e_s6_1",
+			testCase: test.Case{
+				Qname: "example.org.", Qtype: dns.TypeMX,
+				Answer: []dns.RR{test.MX("example.org.	300	IN	MX	10	smtp.example.org.")},
+				Extra: []dns.RR{
+					test.A("smtp.example.org.	600	IN	A	192.0.2.1"),
+					test.A("smtp.example.org.	700	IN	A	192.0.2.2"),
+					test.AAAA("smtp.example.org.	800	IN	AAAA	2001:db8::1"),
+					test.AAAA("smtp.example.org.	900	IN	AAAA	2001:db8::2"),
+				},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 605 * time.Second, Expires: 605 * time.Second},
+					{Key: netip.MustParseAddr("192.0.2.2").AsSlice(), Timeout: 705 * time.Second, Expires: 705 * time.Second},
+				},
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": {
+					{Key: netip.MustParseAddr("2001:db8::1").AsSlice(), Timeout: 805 * time.Second, Expires: 805 * time.Second},
+					{Key: netip.MustParseAddr("2001:db8::2").AsSlice(), Timeout: 905 * time.Second, Expires: 905 * time.Second},
+				},
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name:   "ns query",
+			policy: "sync tree example.org. e2e_s4_1 e2e_s6_1",
+			testCase: test.Case{
+				Qname: "example.org.", Qtype: dns.TypeNS,
+				Answer: []dns.RR{test.NS("example.org.	1000	IN	NS	ns01.example.org.")},
+				Extra:  []dns.RR{test.A("ns01.example.org.	700	IN	A	192.0.2.1")},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 705 * time.Second, Expires: 705 * time.Second},
+				},
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name:   "srv query",
+			policy: "sync tree example.org. e2e_s4_1 e2e_s6_1",
+			testCase: test.Case{
+				Qname: "example.org.", Qtype: dns.TypeSRV,
+				Answer: []dns.RR{test.SRV("example.org.	1000	IN	SRV	0	100	389	dc01.example.org.")},
+				Extra:  []dns.RR{test.A("dc01.example.org.	800	IN	A	192.0.2.1")},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 805 * time.Second, Expires: 805 * time.Second},
+				},
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
+				"e2e_s6_3": nil,
+				"e2e_s6_4": nil,
+			},
+			afterFlushing: true,
+		},
+		{
+			name:   "https query",
+			policy: "sync tree example.org. e2e_s4_1 e2e_s6_1",
+			testCase: test.Case{
+				Qname: "example.org.", Qtype: dns.TypeHTTPS,
+				Answer: []dns.RR{}, // skip this one
+				Extra:  []dns.RR{test.A("example.org.	900	IN	A	192.0.2.1")},
+			},
+			wantErr: false,
+			wantElements: map[string][]nft.SetElement{
+				"e2e_s4_1": {
+					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 905 * time.Second, Expires: 905 * time.Second},
+				},
+				"e2e_s4_2": nil,
+				"e2e_s4_3": nil,
+				"e2e_s4_4": nil,
+				"e2e_s6_1": nil,
+				"e2e_s6_2": nil,
 				"e2e_s6_3": nil,
 				"e2e_s6_4": nil,
 			},

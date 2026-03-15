@@ -42,10 +42,10 @@ func (t *treeStab) Build(map[string]ipSet)  {}
 // TestUpdateSetByNames is integration test.
 func TestUpdateSetByNames(t *testing.T) {
 	tests := []struct {
-		name   string
-		iNames []string
-		iV4    []nft.SetElement
-		iV6    []nft.SetElement
+		name  string
+		iName string
+		iV4   []nft.SetElement
+		iV6   []nft.SetElement
 
 		// since it's difficult to sort results and expected values in strict weak order
 		// while preserving the message type sequence, so fixing the return value of Search()
@@ -56,7 +56,7 @@ func TestUpdateSetByNames(t *testing.T) {
 	}{
 		{
 			"happy path",
-			[]string{"example.com."},
+			"example.com.",
 			[]nft.SetElement{
 				{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
 				{Key: netip.MustParseAddr("192.0.2.2").AsSlice()},
@@ -144,8 +144,8 @@ func TestUpdateSetByNames(t *testing.T) {
 			false,
 		},
 		{
-			"multi names and only one family",
-			[]string{"example.com.", "sub.example.com."},
+			"only ipv4",
+			"example.com.",
 			[]nft.SetElement{
 				{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
 			},
@@ -162,23 +162,12 @@ func TestUpdateSetByNames(t *testing.T) {
 					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
 					add,
 				},
-
-				{
-					&nft.Set{Name: "s4_1"},
-					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
-					destroy,
-				},
-				{
-					&nft.Set{Name: "s4_1"},
-					[]fakeElement{{Key: netip.MustParseAddr("192.0.2.1").AsSlice()}},
-					add,
-				},
 			},
 			false,
 		},
 		{
 			"set object nil",
-			[]string{"example.com."},
+			"example.com.",
 			[]nft.SetElement{
 				{Key: netip.MustParseAddr("192.0.2.1").AsSlice()},
 			},
@@ -202,7 +191,7 @@ func TestUpdateSetByNames(t *testing.T) {
 		},
 		{
 			"nil elements",
-			[]string{"example.com."},
+			"example.com.",
 			nil,
 			nil,
 			func(s string) []ipSet { return []ipSet{{&nft.Set{Name: "s4_1"}, &nft.Set{Name: "s6_1"}}} },
@@ -211,7 +200,7 @@ func TestUpdateSetByNames(t *testing.T) {
 		},
 		{
 			"empty elements",
-			[]string{"example.com."},
+			"example.com.",
 			[]nft.SetElement{},
 			[]nft.SetElement{},
 			func(s string) []ipSet { return []ipSet{{&nft.Set{Name: "s4_1"}, &nft.Set{Name: "s6_1"}}} },
@@ -227,7 +216,7 @@ func TestUpdateSetByNames(t *testing.T) {
 			ns.SetConn(fake)
 			ns.SetTree(&treeStab{searchStab: tt.treeStab})
 
-			err := ns.updateSetByNames(tt.iNames, tt.iV4, tt.iV6)
+			err := ns.updateSetByName(tt.iName, tt.iV4, tt.iV6)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
