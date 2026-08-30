@@ -4,18 +4,8 @@
     "dockerfile": "Dockerfile"
   },
   "remoteUser": "root",
-  "securityOpt": [
-    "apparmor=unconfined"
-  ],
   "capAdd": [
-    "NET_ADMIN",
-    "SYS_ADMIN",
-    "NET_RAW",
-    "DAC_READ_SEARCH"
-  ],
-  "runArgs": [
-    "--privileged",
-    "--systemd=always"
+    "NET_ADMIN"
   ],
   "customizations": {
     "vscode": {
