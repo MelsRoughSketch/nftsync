@@ -43,11 +43,6 @@ type ResponseWriter struct {
 	ctx    context.Context
 }
 
-// NewResponseWriter returns a pointer to a new ResponseWriter
-func NewResponseWriter(srv string, w dns.ResponseWriter, n *NftSync, c context.Context) *ResponseWriter {
-	return &ResponseWriter{server: srv, ResponseWriter: w, NftSync: n, ctx: c}
-}
-
 func (r *ResponseWriter) WriteMsg(res *dns.Msg) error {
 	qname := res.Question[0].Name
 	ttlConverter := getTTLConverter(r.minttl)

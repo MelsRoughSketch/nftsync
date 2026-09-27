@@ -21,7 +21,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/stretchr/testify/assert"
 
 	"github.com/coredns/caddy"
 	nft "github.com/google/nftables"
@@ -66,10 +65,13 @@ func setuptester(test testNftsync, t *testing.T) {
 	c := caddy.NewTestController("dns", test.input)
 	ns, err := NftSyncParse(c)
 	if test.wantErr {
-		assert.Error(t, err)
+		if err == nil {
+			t.Error("expected an error")
+		}
 		return
-	} else {
-		assert.NoError(t, err)
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	if reflect.TypeOf(ns.conn) != test.wantConn {
@@ -242,9 +244,13 @@ func TestSync(t *testing.T) {
 			c := caddy.NewTestController("dns", fmt.Sprintf("nftsync debug inet t {\n%s\n}", tt.input))
 			ns, err := NftSyncParse(c)
 			if tt.wantErr {
-				assert.Error(t, err)
+				if err == nil {
+					t.Error("expected an error")
+				}
 				return
-			} else if !assert.NoError(t, err) {
+			}
+			if err != nil {
+				t.Error(err)
 				return
 			}
 

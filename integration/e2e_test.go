@@ -29,7 +29,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	nft "github.com/google/nftables"
 	"github.com/miekg/dns"
-	"github.com/stretchr/testify/assert"
 
 	"github.com/MelsRoughSketch/nftsync"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
@@ -99,12 +98,12 @@ func TestE2E(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		policy        string
-		testCase      test.Case
-		wantErr       bool
-		wantElements  map[string][]nft.SetElement
-		afterFlushing bool // Whether to flash after the evaluation is complete
+		name         string
+		policy       string
+		testCase     test.Case
+		wantErr      bool
+		wantElements map[string][]nft.SetElement
+		keepElements bool
 	}{
 		{
 			name: "valid",
@@ -116,20 +115,12 @@ func TestE2E(t *testing.T) {
 					test.A("example.com.	3600	IN	A	192.0.2.1"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
 				},
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: false,
+			keepElements: true,
 		},
 		{
 			name: "check override element",
@@ -141,20 +132,11 @@ func TestE2E(t *testing.T) {
 					test.A("example.com.	3600	IN	A	192.0.2.1"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
 				},
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name: "uppercase setting",
@@ -166,20 +148,11 @@ func TestE2E(t *testing.T) {
 					test.A("example.com.	3600	IN	A	192.0.2.1"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
 				},
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name: "check tree",
@@ -191,7 +164,6 @@ func TestE2E(t *testing.T) {
 					test.A("sub.example.com.	3600	IN	A	192.0.2.1"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
@@ -199,14 +171,7 @@ func TestE2E(t *testing.T) {
 				"e2e_s4_2": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
 				},
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name: "check tree",
@@ -218,20 +183,11 @@ func TestE2E(t *testing.T) {
 					test.A("example.com.	3600	IN	A	192.0.2.1"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
 				},
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name: "check cname chain",
@@ -244,7 +200,6 @@ func TestE2E(t *testing.T) {
 					test.A("mels.cdn.net.	3600	IN	A	192.0.2.1"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
@@ -252,14 +207,7 @@ func TestE2E(t *testing.T) {
 				"e2e_s4_2": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
 				},
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name: "check cname chain(tree)",
@@ -273,7 +221,6 @@ func TestE2E(t *testing.T) {
 					test.A("mels.cdn.net.	3600	IN	A	192.0.2.1"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
@@ -284,13 +231,7 @@ func TestE2E(t *testing.T) {
 				"e2e_s4_3": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
 				},
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name: "broken cname chain",
@@ -303,18 +244,6 @@ func TestE2E(t *testing.T) {
 					test.A("broken.cdn.net.	3600	IN	A	192.0.2.1"),
 				},
 			},
-			wantErr: false,
-			wantElements: map[string][]nft.SetElement{
-				"e2e_s4_1": nil,
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
-			},
-			afterFlushing: true,
 		},
 		{
 			name:   "looped cname chain",
@@ -329,17 +258,6 @@ func TestE2E(t *testing.T) {
 				},
 			},
 			wantErr: true,
-			wantElements: map[string][]nft.SetElement{
-				"e2e_s4_1": nil,
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
-			},
-			afterFlushing: true,
 		},
 		{
 			name: "multi address",
@@ -354,7 +272,6 @@ func TestE2E(t *testing.T) {
 					test.A("mels.cdn.net.	3800	IN	A	192.0.2.3"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
@@ -366,14 +283,7 @@ func TestE2E(t *testing.T) {
 					{Key: netip.MustParseAddr("192.0.2.2").AsSlice(), Timeout: 3705 * time.Second, Expires: 3705 * time.Second},
 					{Key: netip.MustParseAddr("192.0.2.3").AsSlice(), Timeout: 3805 * time.Second, Expires: 3805 * time.Second},
 				},
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name: "multi v6 address",
@@ -388,12 +298,7 @@ func TestE2E(t *testing.T) {
 					test.AAAA("mels.cdn.net.	3800	IN	AAAA	2001:db8::3"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
-				"e2e_s4_1": nil,
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
 				"e2e_s6_1": {
 					{Key: netip.MustParseAddr("2001:db8::1").AsSlice(), Timeout: 3605 * time.Second, Expires: 3605 * time.Second},
 					{Key: netip.MustParseAddr("2001:db8::2").AsSlice(), Timeout: 3705 * time.Second, Expires: 3705 * time.Second},
@@ -404,10 +309,7 @@ func TestE2E(t *testing.T) {
 					{Key: netip.MustParseAddr("2001:db8::2").AsSlice(), Timeout: 3705 * time.Second, Expires: 3705 * time.Second},
 					{Key: netip.MustParseAddr("2001:db8::3").AsSlice(), Timeout: 3805 * time.Second, Expires: 3805 * time.Second},
 				},
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name:   "not found mx(extra) records",
@@ -417,18 +319,6 @@ func TestE2E(t *testing.T) {
 				Answer: []dns.RR{},
 				Extra:  []dns.RR{},
 			},
-			wantErr: false,
-			wantElements: map[string][]nft.SetElement{
-				"e2e_s4_1": nil,
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
-			},
-			afterFlushing: true,
 		},
 		{
 			name:   "mx query",
@@ -443,24 +333,16 @@ func TestE2E(t *testing.T) {
 					test.AAAA("smtp.example.org.	900	IN	AAAA	2001:db8::2"),
 				},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 605 * time.Second, Expires: 605 * time.Second},
 					{Key: netip.MustParseAddr("192.0.2.2").AsSlice(), Timeout: 705 * time.Second, Expires: 705 * time.Second},
 				},
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
 				"e2e_s6_1": {
 					{Key: netip.MustParseAddr("2001:db8::1").AsSlice(), Timeout: 805 * time.Second, Expires: 805 * time.Second},
 					{Key: netip.MustParseAddr("2001:db8::2").AsSlice(), Timeout: 905 * time.Second, Expires: 905 * time.Second},
 				},
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name:   "ns query",
@@ -470,20 +352,11 @@ func TestE2E(t *testing.T) {
 				Answer: []dns.RR{test.NS("example.org.	1000	IN	NS	ns01.example.org.")},
 				Extra:  []dns.RR{test.A("ns01.example.org.	700	IN	A	192.0.2.1")},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 705 * time.Second, Expires: 705 * time.Second},
 				},
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name:   "srv query",
@@ -493,20 +366,11 @@ func TestE2E(t *testing.T) {
 				Answer: []dns.RR{test.SRV("example.org.	1000	IN	SRV	0	100	389	dc01.example.org.")},
 				Extra:  []dns.RR{test.A("dc01.example.org.	800	IN	A	192.0.2.1")},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 805 * time.Second, Expires: 805 * time.Second},
 				},
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 		{
 			name:   "https query",
@@ -516,20 +380,11 @@ func TestE2E(t *testing.T) {
 				Answer: []dns.RR{}, // skip this one
 				Extra:  []dns.RR{test.A("example.org.	900	IN	A	192.0.2.1")},
 			},
-			wantErr: false,
 			wantElements: map[string][]nft.SetElement{
 				"e2e_s4_1": {
 					{Key: netip.MustParseAddr("192.0.2.1").AsSlice(), Timeout: 905 * time.Second, Expires: 905 * time.Second},
 				},
-				"e2e_s4_2": nil,
-				"e2e_s4_3": nil,
-				"e2e_s4_4": nil,
-				"e2e_s6_1": nil,
-				"e2e_s6_2": nil,
-				"e2e_s6_3": nil,
-				"e2e_s6_4": nil,
 			},
-			afterFlushing: true,
 		},
 	}
 	for _, tt := range tests {
@@ -552,9 +407,13 @@ func TestE2E(t *testing.T) {
 
 			_, err = ns.ServeDNS(context.TODO(), rec, req)
 			if tt.wantErr {
-				assert.Error(t, err)
+				if err == nil {
+					t.Error("expected an error")
+				}
 				return
-			} else if !assert.NoError(t, err) {
+			}
+			if err != nil {
+				t.Error(err)
 				return
 			}
 
@@ -586,11 +445,11 @@ func TestE2E(t *testing.T) {
 					t.Error(diff)
 				}
 
-				if tt.afterFlushing {
+				if !tt.keepElements {
 					nftConn.FlushSet(v)
 				}
 			}
-			if tt.afterFlushing {
+			if !tt.keepElements {
 				if err := nftConn.Flush(); err != nil {
 					t.Fatalf("failed flush set: %v", err)
 				}

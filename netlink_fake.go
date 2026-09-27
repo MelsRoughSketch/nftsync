@@ -44,30 +44,16 @@ const (
 	nilTable    = "niltab"
 )
 
-// for Stringer
-type fakeElement nft.SetElement
-
-func (e *fakeElement) String() string {
-	return fmt.Sprintf("%s, timeout %s", net.IP(e.Key), e.Timeout)
-}
-
-func castSlice(vals []nft.SetElement) (es []fakeElement) {
-	for _, v := range vals {
-		es = append(es, fakeElement(v))
-	}
-	return
-}
-
 type fakeSetMessage struct {
 	Set   *nft.Set
-	Elems []fakeElement
+	Elems []nft.SetElement
 	Flag  Flag
 }
 
 func (m fakeSetMessage) String() string {
 	var s []string
 	for _, e := range m.Elems {
-		s = append(s, e.String())
+		s = append(s, fmt.Sprintf("%s, timeout %s", net.IP(e.Key), e.Timeout))
 	}
 
 	var family, table string
@@ -124,7 +110,7 @@ func (n *NetlinkFake) SetDestroyElements(s *nft.Set, vals []nft.SetElement) erro
 	if s == nil {
 		panic("recieved nil")
 	}
-	n.m = append(n.m, fakeSetMessage{Set: s, Elems: castSlice(vals), Flag: destroy})
+	n.m = append(n.m, fakeSetMessage{Set: s, Elems: vals, Flag: destroy})
 	return nil
 }
 
@@ -132,7 +118,7 @@ func (n *NetlinkFake) SetAddElements(s *nft.Set, vals []nft.SetElement) error {
 	if s == nil {
 		panic("recieved nil")
 	}
-	n.m = append(n.m, fakeSetMessage{Set: s, Elems: castSlice(vals), Flag: add})
+	n.m = append(n.m, fakeSetMessage{Set: s, Elems: vals, Flag: add})
 	return nil
 }
 

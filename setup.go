@@ -59,7 +59,7 @@ func NftSyncParse(c *caddy.Controller) (*NftSync, error) {
 	if err != nil {
 		return nil, err
 	}
-	ns.SetConn(conn)
+	ns.conn = conn
 
 	j := 0
 
@@ -77,7 +77,7 @@ func NftSyncParse(c *caddy.Controller) (*NftSync, error) {
 
 		if args[0] == "debug" {
 			log.Infof("mocking netlink connection, zone:%s", ns.zoneMetricLabel)
-			ns.SetConn(NewNetlinkFake())
+			ns.conn = NewNetlinkFake()
 			args = args[1:]
 		}
 
@@ -137,8 +137,6 @@ func NftSyncParse(c *caddy.Controller) (*NftSync, error) {
 						"regex matching is not supported, please consider using the tree flag: %s", nn)
 				}
 
-				// TODO: refactoring
-				// the current Tree implicitly requires a feature that handles `*.`
 				fn := nn
 				if isTree {
 					fn = "*." + nn
@@ -155,7 +153,6 @@ func NftSyncParse(c *caddy.Controller) (*NftSync, error) {
 					}
 				}
 
-				// to optimize tree traversal, execute only if the set is found
 				if sets[0] != nil || sets[1] != nil {
 					ns.config[fn] = ipSet{V4: sets[0], V6: sets[1]}
 				}
@@ -166,7 +163,6 @@ func NftSyncParse(c *caddy.Controller) (*NftSync, error) {
 		}
 	}
 
-	ns.tree.Build(ns.config)
 	return ns, nil
 }
 
